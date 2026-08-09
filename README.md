@@ -235,6 +235,6 @@ directory holding the stage-2 `best_model.pt`. `fig_show_save()` renders a
 
 
 ## Contact
-
-Xinyue Jiang — `xyuejiang@hnu.edu.cn` (College of Computer Science and Electronic Engineering,
-Hunan University). Issues and pull requests are welcome.
+If you have any questions or want to use the code, feel free to contact:
+* Jiang Xinyue (xyuejiang@hnu.edu.cn, shirleyuue@foxmail.com),College of Computer Science and Electronic Engineering,
+Hunan University.
