@@ -366,15 +366,15 @@ if __name__ == "__main__":
 
     if isGraph:
         stage = 'train'
-        Radio_train_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _train.txt", div_block=True, load_W=False, few_shot_ratio=0.02,device=device)
-        Radio_val_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _valid.txt", div_block=True, load_W=False,few_shot_ratio=0.02,device=device)
+        Radio_train_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _train.txt", div_block=True, load_W=False, few_shot_ratio=1,device=device)
+        Radio_val_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _valid.txt", div_block=True, load_W=False,few_shot_ratio=1,device=device)
 
 
     else:
         stage = 'pretrain'
         # Only the pretraining stage needs W to be loaded.
-        Radio_train_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _train.txt", div_block=False, load_W=False, few_shot_ratio=0.1,device=device)
-        Radio_val_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _valid.txt", div_block=False, load_W=False, few_shot_ratio=0.1,device=device)
+        Radio_train_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _train.txt", div_block=False, load_W=False, few_shot_ratio=1,device=device)
+        Radio_val_spec = SpectrumDatasetField("./dataset/SpectrumNet/area _valid.txt", div_block=False, load_W=False, few_shot_ratio=1,device=device)
 
 
 

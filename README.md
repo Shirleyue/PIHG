@@ -1,6 +1,6 @@
 # PIHG: Physics-Inspired Heterogeneous Graph Neural Networks for Multi-band Radio Map Prediction
 
-Official implementation of **PIHG**, published in *IEEE Transactions on Wireless Communications*.
+Official implementation of **PIHG**:Physics-Inspired Heterogeneous Graph Neural Networks for Multi-band Radio Map Prediction.
 
 > Radio maps are instrumental in optimizing wireless network performance by providing spatial
 > distributions of signal power. However, predicting multi-band radio maps across diverse
@@ -23,51 +23,7 @@ PIHG follows a **coarse-to-fine** paradigm:
 
 ## Overview
 
-```mermaid
-flowchart TB
-    subgraph IN["Inputs — 4 x 128 x 128"]
-        direction LR
-        I1["Building layout<br/>B"]
-        I2["Tx positions<br/>P_tx"]
-        I3["Incident field<br/>Re(E_inc), Im(E_inc)"]
-    end
-
-    subgraph CG["Stage 1 — Physics-inspired Coarse-grained Estimation"]
-        direction TB
-        U1["<b>UNet-1</b><br/>4ch -> 2ch"]
-        ET["Total field<br/>E_tot (Re, Im)"]
-        MAG["Convert to radio map<br/>abs(E_tot) -> 1ch"]
-        U2["<b>UNet-2</b><br/>data-driven correction"]
-        PC["Coarse radio map<br/>P_c"]
-        U1 --> ET --> MAG --> U2 --> PC
-    end
-
-    subgraph FG["Stage 2 — Propagation-aware Graph Refinement"]
-        direction TB
-        NF["Node features<br/>coarse RSS + freq code<br/>+ node-type embedding"]
-        HG["Heterogeneous graph<br/>3 node types / 6 relations<br/>16 blocks of 32 x 32"]
-        PAG["<b>PAGNet</b><br/>2 x RGATConv + residual<br/>relation-aware attention"]
-        PF["Fine radio map<br/>P_f"]
-        NF --> PAG
-        HG --> PAG
-        PAG --> PF
-    end
-
-    SOM["Spectral Obstruction Map<br/>radio depth along LoS"]
-
-    IN --> U1
-    PC --> NF
-    SOM --> HG
-
-    ET -.-> LP["<b>L_p</b> physics consistency<br/>‖ (I + G·chi) E_tot − E_inc ‖²<br/><i>FFT matvec, no dense W</i>"]
-    PC -.-> LD["<b>L_d</b> data consistency<br/>‖ P − P_c ‖²"]
-    PF -.-> LF["<b>L_fg</b> fine-grained loss<br/>‖ P − P_f ‖²"]
-    LP -.-> LCG["L_cg = L_p + lambda · L_d<br/><i>stage-1 objective</i>"]
-    LD -.-> LCG
-
-    classDef loss fill:#fff5e6,stroke:#e8a33d,color:#7a4a00;
-    class LP,LD,LF,LCG loss;
-```
+![model framework](Figs/overview.png "Model Architecture")
 
 ### Where each block lives in the code
 
@@ -101,8 +57,6 @@ complex128, ~1e-7 in complex64).
 (`0-0, 0-1, 0-2, 1-1, 1-2, 2-2`). An edge exists when two nodes are close in both SOM value and
 space (Eq. 17). Each `128 x 128` region is partitioned into `16` blocks of `32 x 32`, PAGNet runs
 per block, and the blocks are re-assembled into the full map.
-
-**Model size.** 5.91 M parameters total — UNet-1 2.95 M, UNet-2 2.95 M, PAGNet 4.4 K.
 
 ---
 
@@ -169,11 +123,14 @@ pip install torchmetrics numpy scipy numba scikit-image networkx pandas \
 
 ## Dataset preparation
 
+## Dataset
+
 PIHG is evaluated on the public multi-band radio map benchmark
 **SpectrumNet** (Zhang *et al.*, *IEEE TCCN* 2025): 15,300 real-world building maps over 11 terrain
 scenarios, `1.28 km x 1.28 km` per region at 10 m resolution (`128 x 128` grids), 5 carrier
 frequencies (150 MHz, 1.5 GHz, 1.7 GHz, 3.5 GHz, 22 GHz). We use the ground-level (1.5 m) maps.
-Received power is normalized to `[0, 1]`, where `0 = -120 dBm` and `1 = 60 dBm`.
+Received power is normalized to `[0, 1]`, where `0 = -120 dBm` and `1 = 60 dBm`. The SpectrumNet data can be found
+in [SpectrumNet](https://spectrum-net.github.io/).
 
 The cross-dataset experiments additionally use
 [RadioMapSeer](https://radiomapseer.github.io/) and
@@ -239,10 +196,6 @@ order by `SpectrumDatasetField.__getitem__`:
 | 3 | radio depth / SOM `.npy` |
 | 4 | incident-field NPZ (`E_inc_trad_2channel`, `chi`) |
 
-A sample yields `(inputs, rss_map, graph, chi, f_hz, W)`, where `inputs` stacks
-`[building, tx, Re(E_inc), Im(E_inc)]` into `4 x 128 x 128`, and `graph` maps each block index to
-its `node_obs_axis`, `node_freq`, `node_type_ids`, `edge_index`, `edge_type`, `tx_img`, `building`.
-
 ---
 
 ## Training
@@ -252,8 +205,6 @@ Training is **two-stage**, both driven by [train.py](train.py) via the `isGraph`
 
 ### Stage 1 — physics-inspired coarse estimation (`isGraph = False`)
 
-Trains the UNet cascade with `L_cg = L_p + lambda * L_d`. The `L_p` term needs no dense `W`: FFT
-kernels for the 5 frequencies (~2.5 MB total) are built once at startup by `WKernelCache`.
 
 ```bash
 python train.py     # with isGraph = False
@@ -262,20 +213,12 @@ python train.py     # with isGraph = False
 
 ### Stage 2 — graph refinement (`isGraph = True`)
 
-Loads the stage-1 checkpoint through `pt_path`, **freezes both UNets**, and optimizes PAGNet only
-with `L_fg`. This is what accelerates convergence and stabilizes optimization.
+
 
 ```bash
 python train.py     # with isGraph = True
 # -> results/SpectrumNet/PIHG<lambda>/area /train/{best_model.pt,train.txt,result.txt}
 ```
-
-Optimization defaults: AdamW (`lr = 1e-3`, `weight_decay = 1e-5`) for stage 2 and
-(`lr = 1e-4`) for stage 1, 300 epochs, `SequentialLR` = 5-epoch linear warm-up followed by
-`CosineAnnealingWarmRestarts(T_0 = 20, T_mult = 2, eta_min = 1e-6)`.
-
-> **`batch_size` must be 1 for the graph stage.** The graph branch of `Phy_CNN_Graph.forward`
-> indexes `out[0, 0]` and reshapes to `(1, 1, H, W)`, so it assumes a single sample per batch.
 
 ## Evaluation
 
@@ -290,69 +233,6 @@ directory holding the stage-2 `best_model.pt`. `fig_show_save()` renders a
 
 ---
 
-## Reproducing the paper configuration
-
-The committed defaults are tuned for fast smoke runs and **do not all match the paper**. Align them
-before reproducing the reported numbers:
-
-| Setting | Paper | Committed default | Where |
-| --- | --- | --- | --- |
-| Data fraction | full dataset | `few_shot_ratio = 0.02` (train), `0.01` (test) | `train.py`, `test.py` |
-| `lambda` (loss balance) | `1` (best, Table X) | `args['lamda'] = 0.01` | `train.py` |
-| `eta_f` (frequency fading) | `20` | `beta = 10.0` | `gen_radio_depth.py` |
-| `tau_d` (spatial threshold) | `45 m` = 4.5 grid cells | `dth = 4.5` / `dth = 9` | `gen_spect_adj.py` / `gen_spect_adj_old.py` |
-| `tau_o` (obstruction threshold) | `3.5` | `sigma = obs_cof * 10*log10(5750)` -> `18.8` / `3.76` | `gen_spect_adj.py` / `gen_spect_adj_old.py` |
-
-Also note that `train.py` writes to `model_name = 'PIHG' + str(args.lamda)` while `test.py` reads
-from `model_name = 'PIHG'`; point `test.py` at the directory that actually holds your checkpoint.
-
----
-
-## Results
-
-Overall performance on SpectrumNet (Table II of the paper); best in **bold**:
-
-| Method | MSE ↓ | RMSE ↓ | NMSE ↓ | PSNR ↑ |
-| --- | --- | --- | --- | --- |
-| RadioUNet | 0.0283 | 0.1666 | 0.5856 | 13.621 |
-| AE | 0.0337 | 0.1751 | 0.8387 | 12.420 |
-| PEFNet | 0.0284 | 0.1566 | 0.5599 | 13.653 |
-| PMNet | 0.0281 | 0.1559 | 0.5870 | 13.646 |
-| UNetDCN | 0.0284 | 0.1585 | 0.6081 | 13.407 |
-| RadioFormer | 0.0474 | 0.2080 | 1.0238 | 10.874 |
-| RadioDiff | 0.0428 | 0.1932 | 0.8887 | 11.793 |
-| PhyRMDM | 0.0441 | 0.1921 | 0.7795 | 12.043 |
-| **PIHG** | **0.0243** | **0.1459** | **0.4241** | **14.232** |
-| *Improvement* | *13.49%* | *6.42%* | *24.25%* | *4.2%* |
-
-Ablation (Table VIII); `PIL` = physics-inspired learning, `Hetero` = heterogeneity:
-
-| Variant | MSE ↓ | RMSE ↓ | NMSE ↓ | PSNR ↑ |
-| --- | --- | --- | --- | --- |
-| PIHG w/o PIL | 0.0254 | 0.1500 | 0.4923 | 13.843 |
-| PIHG w/o PAGNet | 0.0263 | 0.1542 | 0.5103 | 13.686 |
-| PIHG w/o (PIL + PAGNet) | 0.0288 | 0.1585 | 0.5867 | 13.571 |
-| PIHG w/o Hetero (GAT instead) | 0.0260 | 0.1527 | 0.4545 | 13.876 |
-| **PIHG** | **0.0243** | **0.1459** | **0.4241** | **14.232** |
-
-Per-band results, per-scenario results, cross-frequency / cross-scenario / cross-dataset
-generalization, noise and transmitter-count robustness, and runtime scaling are reported in
-Tables III–X and Figures 6–12 of the paper.
-
----
-
-## Citation
-
-```bibtex
-@article{jiang2025pihg,
-  title   = {{PIHG}: Physics-Inspired Heterogeneous Graph Neural Networks for
-             Multi-band Radio Map Prediction},
-  author  = {Jiang, Xinyue and Li, Tong and Xiao, Zhu and Chen, Ke and
-             Tai, Andy Chi Lok and Tang, Zhuo and Li, Kenli},
-  journal = {IEEE Transactions on Wireless Communications},
-  year    = {2025}
-}
-```
 
 ## Contact
 

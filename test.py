@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     if data_name == 'SpectrumNet':
         Radio_test = SpectrumDatasetField("./dataset/SpectrumNet/area _test.txt", div_block=True, load_W=False,
-                                          few_shot_ratio=0.01,device=device, noise_std=noise_std)
+                                          few_shot_ratio=1,device=device, noise_std=noise_std)
 
         print('Radio_test len:', len(Radio_test))
 
