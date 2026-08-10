@@ -343,7 +343,7 @@ if __name__ == "__main__":
         'phy_Nx': 128,
         'phy_Ny': 128,
         'f_mhz_lst': [150, 1500, 1700, 3500, 22000],
-        'lamda': 0.01,  # weight of the physics-consistency loss
+        'lamda': 1,  # weight of the physics-consistency loss
     }
     args = SimpleNamespace(**args)
 
